@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <vector>
 #include <cstring>
+#include <optional>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -46,12 +47,41 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 
 struct QueueFamilyIndices
 {
-    uint32_t graphicsFamily;
+    std::optional<uint32_t> graphicsFamily;
+    
+    bool isComplete()
+    {
+        return graphicsFamily.has_value();
+    }
+
 };
 
 QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
 {
     QueueFamilyIndices indices;
+
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+    int i = 0;
+    for (const auto& queueFamily : queueFamilies)
+    {
+        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            indices.graphicsFamily = i;
+        }
+
+        if (indices.isComplete())
+        {
+            break;
+        }
+
+        i++;
+    }
+
     return indices;
 }
 
@@ -166,16 +196,19 @@ private:
 
         for (const auto& device : devices) 
         {
-
-			VkPhysicalDeviceProperties deviceProperties;
-			VkPhysicalDeviceFeatures deviceFeatures;
-			vkGetPhysicalDeviceProperties(device, &deviceProperties);
-			vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+            if (isDeviceSuitable(device))
+            {
+				VkPhysicalDeviceProperties deviceProperties;
+				VkPhysicalDeviceFeatures deviceFeatures;
+				vkGetPhysicalDeviceProperties(device, &deviceProperties);
+				vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+				
+				std::cout << "Reading Device" << deviceProperties.deviceName << "..." << "\n";
+				int score = rateDeviceSuitability(device);
+				std::cout << "Device Score: " << score << '\n';
+				candidates.insert(std::make_pair(score, device));
 			
-            std::cout << "Reading Device" << deviceProperties.deviceName << "..." << "\n";
-            int score = rateDeviceSuitability(device);
-            std::cout << "Device Score: " << score << '\n';
-            candidates.insert(std::make_pair(score, device));
+            }
         }
 
         if (candidates.rbegin()->first > 0)
@@ -292,12 +325,8 @@ private:
     
     bool isDeviceSuitable(VkPhysicalDevice device)
     {
-        VkPhysicalDeviceProperties deviceProperties;
-        VkPhysicalDeviceFeatures deviceFeatures;
-        vkGetPhysicalDeviceProperties(device, &deviceProperties);
-        vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-        
-        return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && deviceFeatures.geometryShader;
+        QueueFamilyIndices indices = findQueueFamilies(device);
+        return indices.isComplete();
     }
 
     void mainLoop() 
